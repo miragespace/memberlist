@@ -56,6 +56,8 @@ func (m *Memberlist) encodeAndBroadcast(node string, msgType messageType, msg in
 // silently if there is an encoding error.
 func (m *Memberlist) encodeBroadcastNotify(node string, msgType messageType, msg interface{}, notify chan struct{}) {
 	buf, err := encode(msgType, msg)
+	// NOTE(zllovesuki): It is not safe to return the buffer to the bufPool
+	// as we hand off the buffer to potentially a different library
 	if err != nil {
 		m.logger.Printf("[ERR] memberlist: Failed to encode message for broadcast: %s", err)
 	} else {

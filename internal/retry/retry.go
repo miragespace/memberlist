@@ -13,7 +13,6 @@
 package retry
 
 import (
-	"bytes"
 	"fmt"
 	"runtime"
 	"strings"
@@ -102,15 +101,15 @@ func dedup(a []string) string {
 	for _, s := range a {
 		m[s] = m[s] + 1
 	}
-	var b bytes.Buffer
+	var sb strings.Builder
 	for _, s := range a {
 		if _, ok := m[s]; ok {
-			b.WriteString(s)
-			b.WriteRune('\n')
+			sb.WriteString(s)
+			sb.WriteRune('\n')
 			delete(m, s)
 		}
 	}
-	return b.String()
+	return sb.String()
 }
 
 func run(r Retryer, t Failer, f func(r *R)) {

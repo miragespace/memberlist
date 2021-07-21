@@ -41,6 +41,7 @@ func TestHandleCompoundPing(t *testing.T) {
 		SourceNode: "test",
 	}
 	buf, err := encode(pingMsg, ping)
+	defer bufPool.Put(buf)
 	if err != nil {
 		t.Fatalf("unexpected err %s", err)
 	}
@@ -110,6 +111,7 @@ func TestHandlePing(t *testing.T) {
 		SourceNode: "test",
 	}
 	buf, err := encode(pingMsg, ping)
+	defer bufPool.Put(buf)
 	if err != nil {
 		t.Fatalf("unexpected err %s", err)
 	}
@@ -175,6 +177,7 @@ func TestHandlePing_WrongNode(t *testing.T) {
 		SourceNode: "test",
 	}
 	buf, err := encode(pingMsg, ping)
+	defer bufPool.Put(buf)
 	if err != nil {
 		t.Fatalf("unexpected err %s", err)
 	}
@@ -219,6 +222,7 @@ func TestHandleIndirectPing(t *testing.T) {
 		SourceNode: "test",
 	}
 	buf, err := encode(indirectPingMsg, &ind)
+	defer bufPool.Put(buf)
 	if err != nil {
 		t.Fatalf("unexpected err %s", err)
 	}
@@ -328,7 +332,7 @@ func TestTCPPing(t *testing.T) {
 			t.Fatalf("failed to encode ack: %s", err)
 		}
 
-		err = m.rawSendMsgStream(conn, out.Bytes())
+		err = m.rawSendMsgStream(conn, out)
 		if err != nil {
 			t.Fatalf("failed to send ack: %s", err)
 		}
@@ -367,7 +371,7 @@ func TestTCPPing(t *testing.T) {
 			t.Fatalf("failed to encode ack: %s", err)
 		}
 
-		err = m.rawSendMsgStream(conn, out.Bytes())
+		err = m.rawSendMsgStream(conn, out)
 		if err != nil {
 			t.Fatalf("failed to send ack: %s", err)
 		}
@@ -401,7 +405,7 @@ func TestTCPPing(t *testing.T) {
 			t.Fatalf("failed to encode bogus msg: %s", err)
 		}
 
-		err = m.rawSendMsgStream(conn, out.Bytes())
+		err = m.rawSendMsgStream(conn, out)
 		if err != nil {
 			t.Fatalf("failed to send bogus msg: %s", err)
 		}
@@ -474,8 +478,7 @@ func TestTCPPushPull(t *testing.T) {
 
 	// Send our node state
 	header := pushPullHeader{Nodes: 3}
-	hd := codec.MsgpackHandle{}
-	enc := codec.NewEncoder(conn, &hd)
+	enc := codec.NewEncoder(conn, &codec.MsgpackHandle{})
 
 	// Send the push/pull indicator
 	conn.Write([]byte{byte(pushPullMsg)})
@@ -496,8 +499,7 @@ func TestTCPPushPull(t *testing.T) {
 	}
 
 	var bufConn io.Reader = conn
-	msghd := codec.MsgpackHandle{}
-	dec := codec.NewDecoder(bufConn, &msghd)
+	dec := codec.NewDecoder(bufConn, &codec.MsgpackHandle{})
 
 	// Check if we have a compressed message
 	if msgType == compressMsg {
@@ -516,8 +518,8 @@ func TestTCPPushPull(t *testing.T) {
 		// Create a new bufConn
 		bufConn = bytes.NewReader(decomp[1:])
 
-		// Create a new decoder
-		dec = codec.NewDecoder(bufConn, &hd)
+		// Reset the existing decoder
+		dec.Reset(bufConn)
 	}
 
 	// Quit if not push/pull
@@ -588,6 +590,7 @@ func TestSendMsg_Piggyback(t *testing.T) {
 		SourceNode: "test",
 	}
 	buf, err := encode(pingMsg, ping)
+	defer bufPool.Put(buf)
 	if err != nil {
 		t.Fatalf("unexpected err %s", err)
 	}
@@ -673,7 +676,7 @@ func TestEncryptDecryptState(t *testing.T) {
 	}
 
 	// Create reader, seek past the type byte
-	buf := bytes.NewReader(crypt)
+	buf := bytes.NewReader(crypt.Bytes())
 	buf.Seek(1, 0)
 
 	plain, err := m.decryptRemoteState(buf)

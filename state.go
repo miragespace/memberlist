@@ -333,22 +333,27 @@ func (m *Memberlist) probeNode(node *nodeState) {
 		}
 	} else {
 		var msgs [][]byte
-		if buf, err := encode(pingMsg, &ping); err != nil {
+		pingBuf, err := encode(pingMsg, &ping)
+		defer bufPool.Put(pingBuf)
+		if err != nil {
 			m.logger.Printf("[ERR] memberlist: Failed to encode ping message: %s", err)
 			return
 		} else {
-			msgs = append(msgs, buf.Bytes())
+			msgs = append(msgs, pingBuf.Bytes())
 		}
 		s := suspect{Incarnation: node.Incarnation, Node: node.Name, From: m.config.Name}
-		if buf, err := encode(suspectMsg, &s); err != nil {
+		susBuf, err := encode(suspectMsg, &s)
+		defer bufPool.Put(susBuf)
+		if err != nil {
 			m.logger.Printf("[ERR] memberlist: Failed to encode suspect message: %s", err)
 			return
 		} else {
-			msgs = append(msgs, buf.Bytes())
+			msgs = append(msgs, susBuf.Bytes())
 		}
 
-		compound := makeCompoundMessage(msgs)
-		if err := m.rawSendMsgPacket(node.FullAddress(), &node.Node, compound.Bytes()); err != nil {
+		compoundBuf := makeCompoundMessage(msgs)
+		defer bufPool.Put(compoundBuf)
+		if err := m.rawSendMsgPacket(node.FullAddress(), &node.Node, compoundBuf.Bytes()); err != nil {
 			m.logger.Printf("[ERR] memberlist: Failed to send compound ping and suspect message to %s: %s", addr, err)
 			if failedRemote(err) {
 				goto HANDLE_REMOTE_FAILURE

@@ -11,6 +11,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sean-/seed"
@@ -33,20 +34,29 @@ func init() {
 	seed.Init()
 }
 
+var (
+	bufPool = &sync.Pool{
+		New: func() interface{} {
+			return new(bytes.Buffer)
+		},
+	}
+)
+
 // Decode reverses the encode operation on a byte slice input
 func decode(buf []byte, out interface{}) error {
 	r := bytes.NewReader(buf)
-	hd := codec.MsgpackHandle{}
-	dec := codec.NewDecoder(r, &hd)
+	dec := codec.NewDecoder(r, &codec.MsgpackHandle{})
+
 	return dec.Decode(out)
 }
 
-// Encode writes an encoded object to a new bytes buffer
+// Encode writes an encoded object to a bytes buffer
 func encode(msgType messageType, in interface{}) (*bytes.Buffer, error) {
-	buf := bytes.NewBuffer(nil)
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
 	buf.WriteByte(uint8(msgType))
-	hd := codec.MsgpackHandle{}
-	enc := codec.NewEncoder(buf, &hd)
+
+	enc := codec.NewEncoder(buf, &codec.MsgpackHandle{})
 	err := enc.Encode(in)
 	return buf, err
 }
@@ -156,7 +166,8 @@ OUTER:
 // a single compound message containing all of them
 func makeCompoundMessage(msgs [][]byte) *bytes.Buffer {
 	// Create a local buffer
-	buf := bytes.NewBuffer(nil)
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
 
 	// Write out the type
 	buf.WriteByte(uint8(compoundMsg))
@@ -219,8 +230,10 @@ func decodeCompoundMessage(buf []byte) (trunc int, parts [][]byte, err error) {
 // compressPayload takes an opaque input buffer, compresses it
 // and wraps it in a compress{} message that is encoded.
 func compressPayload(inp []byte) (*bytes.Buffer, error) {
-	var buf bytes.Buffer
-	compressor := lzw.NewWriter(&buf, lzw.LSB, lzwLitWidth)
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	compressor := lzw.NewWriter(buf, lzw.LSB, lzwLitWidth)
 
 	_, err := compressor.Write(inp)
 	if err != nil {
