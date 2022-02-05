@@ -274,6 +274,11 @@ func failedRemote(err error) bool {
 			case "dial", "read", "write":
 				return true
 			}
+		} else if strings.HasPrefix(t.Net, "udp") {
+			switch t.Op {
+			case "write":
+				return true
+			}
 		}
 	}
 	return false
@@ -449,7 +454,11 @@ HANDLE_REMOTE_FAILURE:
 			defer close(fallbackCh)
 			didContact, err := m.sendPingAndWaitForAck(node.FullAddress(), ping, deadline)
 			if err != nil {
-				m.logger.Printf("[ERR] memberlist: Failed fallback ping: %s", err)
+				var to string
+				if ne, ok := err.(net.Error); ok && ne.Timeout() {
+					to = fmt.Sprintf("timeout %s: ", probeInterval)
+				}
+				m.logger.Printf("[ERR] memberlist: Failed fallback ping: %s%s", to, err)
 			} else {
 				fallbackCh <- didContact
 			}
@@ -592,7 +601,7 @@ func (m *Memberlist) gossip() {
 	m.nodeLock.RUnlock()
 
 	// Compute the bytes available
-	bytesAvail := m.config.UDPBufferSize - compoundHeaderOverhead
+	bytesAvail := m.config.UDPBufferSize - compoundHeaderOverhead - labelOverhead(m.config.Label)
 	if m.config.EncryptionEnabled() {
 		bytesAvail -= encryptOverhead(m.encryptionVersion())
 	}
@@ -611,10 +620,12 @@ func (m *Memberlist) gossip() {
 				m.logger.Printf("[ERR] memberlist: Failed to send gossip to %s: %s", addr, err)
 			}
 		} else {
-			// Otherwise create and send a compound message
-			compound := makeCompoundMessage(msgs)
-			if err := m.rawSendMsgPacket(node.FullAddress(), &node, compound.Bytes()); err != nil {
-				m.logger.Printf("[ERR] memberlist: Failed to send gossip to %s: %s", addr, err)
+			// Otherwise create and send one or more compound messages
+			compounds := makeCompoundMessages(msgs)
+			for _, compound := range compounds {
+				if err := m.rawSendMsgPacket(node.FullAddress(), &node, compound.Bytes()); err != nil {
+					m.logger.Printf("[ERR] memberlist: Failed to send gossip to %s: %s", addr, err)
+				}
 			}
 		}
 	}
