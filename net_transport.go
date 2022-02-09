@@ -12,12 +12,13 @@ import (
 
 	"github.com/armon/go-metrics"
 	sockaddr "github.com/hashicorp/go-sockaddr"
+	pool "github.com/libp2p/go-buffer-pool"
 )
 
 const (
 	// udpPacketBufSize is used to buffer incoming packets during read
 	// operations.
-	udpPacketBufSize = 65536
+	udpPacketBufSize = 4096
 
 	// udpRecvBufSize is a large buffer size that we attempt to set UDP
 	// sockets to in order to handle a large volume of messages.
@@ -320,7 +321,7 @@ func (t *NetTransport) udpListen(udpLn *net.UDPConn) {
 	for {
 		// Do a blocking read into a fresh buffer. Grab a time stamp as
 		// close as possible to the I/O.
-		buf := make([]byte, udpPacketBufSize)
+		buf := pool.Get(udpPacketBufSize)
 		n, addr, err := udpLn.ReadFrom(buf)
 		ts := time.Now()
 		if err != nil {

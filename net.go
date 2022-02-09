@@ -13,6 +13,7 @@ import (
 	"time"
 
 	metrics "github.com/armon/go-metrics"
+	pool "github.com/libp2p/go-buffer-pool"
 	"github.com/ugorji/go/codec"
 )
 
@@ -433,12 +434,16 @@ func (m *Memberlist) handleCommand(buf []byte, from net.Addr, timestamp time.Tim
 
 	case pingMsg:
 		m.handlePing(buf, from)
+		pool.Put(buf)
 	case indirectPingMsg:
 		m.handleIndirectPing(buf, from)
+		pool.Put(buf)
 	case ackRespMsg:
 		m.handleAck(buf, from, timestamp)
+		pool.Put(buf)
 	case nackRespMsg:
 		m.handleNack(buf, from)
+		pool.Put(buf)
 
 	case suspectMsg:
 		fallthrough
@@ -518,6 +523,7 @@ func (m *Memberlist) packetHandler() {
 				default:
 					m.logger.Printf("[ERR] memberlist: Message type (%d) not supported %s (packet handler)", msgType, LogAddress(from))
 				}
+				pool.Put(buf)
 			}
 
 		case <-m.shutdownCh:
@@ -543,6 +549,7 @@ func (m *Memberlist) handleCompound(buf []byte, from net.Addr, timestamp time.Ti
 	for _, part := range parts {
 		m.handleCommand(part, from, timestamp)
 	}
+	pool.Put(buf)
 }
 
 func (m *Memberlist) handlePing(buf []byte, from net.Addr) {
@@ -766,6 +773,7 @@ func (m *Memberlist) handleCompressed(buf []byte, from net.Addr, timestamp time.
 
 	// Recursively handle the payload
 	m.handleCommand(payload, from, timestamp)
+	pool.Put(buf)
 }
 
 // encodeAndSendMsg is used to combine the encoding and sending steps
